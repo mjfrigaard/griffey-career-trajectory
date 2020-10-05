@@ -243,18 +243,16 @@ KGriffeyJr %>%
 ```
 
 
-
-
-
-
 ## Deploy
 
 Run this code to knit an html file and move it to `docs` folder. 
 
-```{r deploy-to-github, results='hide', message=FALSE, warning=FALSE}
+```{r deploy-to-github, message=FALSE, warning=FALSE, eval=FALSE}
 # create docs folder
 fs::dir_create("docs")
 # knit and move to docs folder
-knitr::knit(input = "index.Rmd", output = "docs/index.html")
+fs::file_move(path = "index.html", new_path = "docs/Index.html")
+# rename
+file.rename(from = "docs/index.html", to = "docs/Index.html")
 ```
 
