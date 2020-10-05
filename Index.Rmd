@@ -263,25 +263,26 @@ KGriffeyJr %>%
   # add points
   ggplot2::geom_point() + 
   # add smoothed line
-  ggplot2::geom_smooth(method = "lm", se = TRUE, size = 1.5, color = "salmon", 
+  ggplot2::geom_smooth(method = "lm", se = TRUE, size = 1.75, color = "gold", 
               # specify the formula using 
               formula = y ~ poly(x = x, degree = 2, raw = TRUE)) +
   # add vertical line
   ggplot2::geom_vline(xintercept = kgriffeyjr_fit_model$age_max, linetype = "dashed", 
-             color = "royalblue") +
+             color = "royalblue", size = 1.25) +
   # add horizontal line
   ggplot2::geom_hline(yintercept = kgriffeyjr_fit_model$max_value, linetype = "dashed", 
-             color = "darkgreen") + 
+             color = "royalblue", size = 1.25) + 
   # label for peak age
   ggplot2::annotate(geom = "text", x = c(peak_age_label_x), 
                           y = c(peak_age_label_y), 
-           label = c("Peak age"), size = 5, color = "royalblue") + 
+           label = c("Peak age"), size = 6, color = "royalblue") + 
   # label for Max OPS
   ggplot2::annotate(geom = "text", x = c(max_value_label_x), 
                           y = c(max_value_label_y), 
-           label = c("Max OPS"), size = 5, color = "darkgreen") +
+           label = c("Max OPS"), size = 6, color = "royalblue") +
   # theme
-  hrbrthemes::theme_ipsum_tw(axis_title_size = 13, axis_text_size = 12) +
+  hrbrthemes::theme_ipsum_tw(plot_title_size = 18, subtitle_size = 16, 
+                             axis_title_size = 15, axis_text_size = 13) +
   # graph labels
   ggplot2::labs(title = "Ken Griffey Jr Career Trajectory", 
                 subtitle = "Age vs. slugging percentage + on-base percentage")
@@ -309,25 +310,26 @@ JCanseco %>%
   # add points
   ggplot2::geom_point() + 
   # add smoothed line
-  ggplot2::geom_smooth(method = "lm", se = TRUE, size = 1.5, color = "salmon", 
+  ggplot2::geom_smooth(method = "lm", se = TRUE, size = 1.75, color = "gold1", 
               # specify the formula using 
               formula = y ~ poly(x = x, degree = 2, raw = TRUE)) +
   # add vertical line
   ggplot2::geom_vline(xintercept = jconseco_fit_model$age_max, linetype = "dashed", 
-             color = "royalblue") +
+             color = "chartreuse4", size = 1.25) +
   # add horizontal line
   ggplot2::geom_hline(yintercept = jconseco_fit_model$max_value, linetype = "dashed", 
-             color = "darkgreen") + 
+             color = "chartreuse4", size = 1.25) + 
   # label for peak age
   ggplot2::annotate(geom = "text", x = c(peak_age_label_x), 
                           y = c(peak_age_label_y), 
-           label = c("Peak age"), size = 5, color = "royalblue") + 
+           label = c("Peak age"), size = 6, color = "chartreuse4") + 
   # label for Max OPS
   ggplot2::annotate(geom = "text", x = c(max_value_label_x), 
                           y = c(max_value_label_y), 
-           label = c("Max OPS"), size = 5, color = "darkgreen") +
+           label = c("Max OPS"), size = 6, color = "chartreuse4") +
   # theme
-  hrbrthemes::theme_ipsum_tw(axis_title_size = 13, axis_text_size = 12) +
+  hrbrthemes::theme_ipsum_tw(plot_title_size = 18, subtitle_size = 16, 
+                             axis_title_size = 15, axis_text_size = 13) +
   # graph labels
   ggplot2::labs(title = "Jose Canseco Career Trajectory", 
                 subtitle = "Age vs. slugging percentage + on-base percentage")
