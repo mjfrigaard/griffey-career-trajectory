@@ -52,6 +52,7 @@ The two primary packages we will use are `tidyverse` and `Lahman`
 ```{r packages, message=FALSE, warning=FALSE}
 library(tidyverse)
 library(Lahman)
+library(broom)
 ```
 
 
@@ -116,7 +117,6 @@ KGriffeyJr %>%
 ## Modeling career performance 
 
 We will borrow the model from [Analyzing Baseball Data with R, 2nd Edition](https://www.amazon.com/Analyzing-Baseball-Data-Second-Chapman/dp/0815353510) and fit a quadratic curve to `OPS` and `Age`. 
-
 > `A + B(Age − 30) + C(Age − 30)^2`
 
 Where `A`, `B`, and `C` are the following, 
@@ -133,10 +133,16 @@ Written as a formula for R to interpret, it looks like this:
 
 `OPS ~ I(Age - 30) + I((Age - 30)^2)`
 
+We're going to run through each component for this model, then put all the steps together into a function so we can apply it to other players. 
+
+### Fit model
+
 ```{r fit}
 fit <- lm(OPS ~ I(Age - 30) + I((Age - 30)^2), data = KGriffeyJr)
 fit
 ```
+
+### Get coefficients 
 
 Now we get the coefficients for `fit`
 
@@ -145,23 +151,42 @@ b <- coef(fit)
 b
 ```
 
+### Max age
+
 Next we need the age_max, or the `30 - (B/2C)`. We can get this by using the 2nd and 3rd element stored in `b` (which are the coefficients for `I(Age - 30)` and `I((Age - 30)^2)`).
 
-age max = `30 - [I(Age - 30)] / [I((Age - 30)^2)] / 2`
+Inspect `b[2]`
+
+```{r b2}
+b[2]
+```
+
+Inspect `b[3]`
+
+```{r b3}
+b[3]
+```
+
+age max = `30 - [I(Age - 30)] / [I((Age - 30)^2)] / 2` 
 
 ```{r age_max}
-b[2]
-b[3]
 age_max <- 30 - b[2] / b[3] / 2
 age_max
 ```
 
-With our `age_max`, now we just need the `max_value` or `A - (B^2/4C)` which is `b[1] - b[2] ^ 2 / b[3] / 4` or 
+### Max OPS value
+
+With our `age_max`, now we just need the `max_value` or `A - (B^2/4C)` which is `b[1] - b[2] ^ 2 / b[3] / 4`
+
+Inspect `b[1]`
+
+```{r b1}
+b[1]
+```
 
 max value = `[(Intercept)] - [I(Age - 30)]^2 / [I((Age - 30)^2)] / 4`
 
 ```{r max_value}
-b[1]
 max_value <- b[1] - b[2] ^ 2 / b[3] / 4
 max_value
 ```
@@ -172,6 +197,10 @@ Finally we combine them into a list.
 list(fit = fit, age_max = age_max, max_value = max_value)
 ```
 
+
+### Build model function 
+
+Now we combine this into a function.
 
 ```{r fit_model}
 fit_model <- function(d) {
@@ -188,60 +217,130 @@ fit_model <- function(d) {
 }
 ```
 
-```{r KGJr_fit_model}
-KGJr_fit_model <- fit_model(KGriffeyJr)
-coef(KGJr_fit_model$fit)
+## Fit model for `KGJr`
+
+Now we can text this function and get the coefficients.
+
+```{r KGJrCoefs}
+kgriffeyjr_fit_model <- fit_model(KGriffeyJr)
+KGJrCoefs <- broom::tidy(stats::coef(kgriffeyjr_fit_model$fit))
+KGJrCoefs
 ```
 
-```{r KGJr_fit_model-age_max-max_value}
-c(KGJr_fit_model$age_max, KGJr_fit_model$max_value)
+The other two elements in our `kgriffeyjr_fit_model` object are the `age_max` and `max_value`
+
+```{r KGJrMaxAgeMaxOPS}
+KGJrMaxAgeMaxOPS <- dplyr::bind_rows(broom::tidy(kgriffeyjr_fit_model$age_max),
+                                  broom::tidy(kgriffeyjr_fit_model$max_value))
+KGJrMaxAgeMaxOPS
 ```
 
-Best fitting curve is,
+The formula for the best fitting curve is,
 
-`0.97276346 − 0.01198292(Age − 30) − 0.00238516(Age − 30)^2`
+`r as.double(KGJrCoefs[1, 2])` - `r as.double(KGJrCoefs[2, 2])` (Age - 30) - `r as.double(KGJrCoefs[3, 2])` (Age - 30)^2
 
 According to this model: 
 
-- `KGJr` peaked at age `27.49`  
+- `KGJr`s peak age is stored in `KGJrMaxAgeMaxOPS` and is `r as.double(KGJrMaxAgeMaxOPS[1 , 2])`  
 
-- His maximum OPS for the curve is stored in `KGJr_fit_model$max_value` and is estimated to be 0.99. 
+- `KGJr`'s maximum `OPS` for the curve is also stored in `KGJrMaxAgeMaxOPS` and is estimated to be `r as.double(KGJrMaxAgeMaxOPS[2, 2])`
 
-- The estimated curvature parameter is the `I((Age - 30)^2)` value: `-0.00238516`.
+- The estimated curvature parameter is the `I((Age - 30)^2)` value: `r as.double(KGJrCoefs[3, 2])`, which means `KGJr`s decrease in `OPS` between his peak age (`r as.double(KGJrMaxAgeMaxOPS[1 , 2])`) and one year older is `r as.double(KGJrCoefs[3, 2])`
 
-- `KGJr` decrease in `OPS` between his peak age (``27.49``) and one year older is `-0.00238516`.
-
-We can plot this below by creating a few labels for the `Peak Age` and `Max OPS`, and adding 
+We can plot this below by creating a few labels for the `Peak Age` and `Max OPS`, and adding a theme. 
 
 ```{r plot-curve}
+# peak age labels
 peak_age_label_y <- mean(KGriffeyJr$OPS)
-# peak_age_label_y
-peak_age_label_x <- KGJr_fit_model$age_max + 1.5
-# peak_age_label_x
-max_value_label_y <- KGJr_fit_model$max_value + 0.05
-# max_value_label_y
+peak_age_label_x <- kgriffeyjr_fit_model$age_max + 1.5
+# max value labels
+max_value_label_y <- kgriffeyjr_fit_model$max_value + 0.05
 max_value_label_x <- min(KGriffeyJr$Age) + 1
-# max_value_label_x
+
+# build plot
 KGriffeyJr %>% 
   ggplot2::ggplot(aes(x = Age, y = OPS)) + 
+  # add points
   ggplot2::geom_point() + 
-  ggplot2::geom_smooth(method = "lm", se = FALSE, size = 1.5, color = "salmon", 
+  # add smoothed line
+  ggplot2::geom_smooth(method = "lm", se = TRUE, size = 1.5, color = "salmon", 
+              # specify the formula using 
               formula = y ~ poly(x = x, degree = 2, raw = TRUE)) +
-  ggplot2::geom_vline(xintercept = KGJr_fit_model$age_max, linetype = "dashed", 
+  # add vertical line
+  ggplot2::geom_vline(xintercept = kgriffeyjr_fit_model$age_max, linetype = "dashed", 
              color = "royalblue") +
-  ggplot2::geom_hline(yintercept = KGJr_fit_model$max_value, linetype = "dashed", 
+  # add horizontal line
+  ggplot2::geom_hline(yintercept = kgriffeyjr_fit_model$max_value, linetype = "dashed", 
              color = "darkgreen") + 
+  # label for peak age
   ggplot2::annotate(geom = "text", x = c(peak_age_label_x), 
                           y = c(peak_age_label_y), 
            label = c("Peak age"), size = 5, color = "royalblue") + 
+  # label for Max OPS
   ggplot2::annotate(geom = "text", x = c(max_value_label_x), 
                           y = c(max_value_label_y), 
            label = c("Max OPS"), size = 5, color = "darkgreen") +
+  # theme
   hrbrthemes::theme_ipsum_tw(axis_title_size = 13, axis_text_size = 12) +
+  # graph labels
   ggplot2::labs(title = "Ken Griffey Jr Career Trajectory", 
                 subtitle = "Age vs. slugging percentage + on-base percentage")
 ```
 
+Let's compare this to Jose Canseco. 
+
+```{r jcanseco_id}
+jcanseco_id <- Lahman::People %>% 
+  filter(nameFirst == "Jose" & nameLast == "Canseco") %>% 
+  pull(playerID)
+JCanseco <- get_stats(jcanseco_id)
+jconseco_fit_model <- fit_model(JCanseco)
+
+# peak age labels
+peak_age_label_y <- mean(JCanseco$OPS)
+peak_age_label_x <- jconseco_fit_model$age_max + 1.5
+# max value labels
+max_value_label_y <- jconseco_fit_model$max_value + 0.05
+max_value_label_x <- min(JCanseco$Age) + 1
+
+# build plot
+JCanseco %>% 
+  ggplot2::ggplot(aes(x = Age, y = OPS)) + 
+  # add points
+  ggplot2::geom_point() + 
+  # add smoothed line
+  ggplot2::geom_smooth(method = "lm", se = TRUE, size = 1.5, color = "salmon", 
+              # specify the formula using 
+              formula = y ~ poly(x = x, degree = 2, raw = TRUE)) +
+  # add vertical line
+  ggplot2::geom_vline(xintercept = jconseco_fit_model$age_max, linetype = "dashed", 
+             color = "royalblue") +
+  # add horizontal line
+  ggplot2::geom_hline(yintercept = jconseco_fit_model$max_value, linetype = "dashed", 
+             color = "darkgreen") + 
+  # label for peak age
+  ggplot2::annotate(geom = "text", x = c(peak_age_label_x), 
+                          y = c(peak_age_label_y), 
+           label = c("Peak age"), size = 5, color = "royalblue") + 
+  # label for Max OPS
+  ggplot2::annotate(geom = "text", x = c(max_value_label_x), 
+                          y = c(max_value_label_y), 
+           label = c("Max OPS"), size = 5, color = "darkgreen") +
+  # theme
+  hrbrthemes::theme_ipsum_tw(axis_title_size = 13, axis_text_size = 12) +
+  # graph labels
+  ggplot2::labs(title = "Jose Canseco Career Trajectory", 
+                subtitle = "Age vs. slugging percentage + on-base percentage")
+```
+
+
+## Calculating DEA to evaluate hitters
+
+> To-do
+
+## Calculating weighted slack to evaluate hitters
+
+> To-do
 
 ## Deploy
 
@@ -254,3 +353,6 @@ fs::dir_create("docs")
 fs::file_move(path = "Index.html", new_path = "docs/Index.html")
 ```
 
+Notes
+
+Check out the [baseballDBR](https://github.com/keberwein/baseballDBR) package.
