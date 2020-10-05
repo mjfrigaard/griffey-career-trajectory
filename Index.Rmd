@@ -219,7 +219,7 @@ fit_model <- function(d) {
 
 ## Fit model for `KGJr`
 
-Now we can text this function and get the coefficients.
+Now we can test this function and get the coefficients. We will use `broom::tidy()` to convert the output into a tibble.
 
 ```{r KGJrCoefs}
 kgriffeyjr_fit_model <- fit_model(KGriffeyJr)
@@ -332,6 +332,8 @@ JCanseco %>%
   ggplot2::labs(title = "Jose Canseco Career Trajectory", 
                 subtitle = "Age vs. slugging percentage + on-base percentage")
 ```
+
+These two graphs show very different career trajectories. Griffey's career peaked sooner at a higher value, and had a steep decline. Canseco's career had more of a gradual climb until it peaked at age `r as.double(jconseco_fit_model$age_max)` with an OPS of `r as.double(jconseco_fit_model$max_value)` (lower than Griffey's).
 
 
 ## Calculating DEA to evaluate hitters
