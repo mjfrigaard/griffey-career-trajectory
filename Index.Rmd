@@ -1,0 +1,260 @@
+---
+title: "Ken Griffey, Jr. Career Trajectory"
+author: "Martin Frigaard"
+output: 
+  html_document: 
+    toc: yes
+    toc_depth: 6
+    highlight: zenburn
+    theme: united
+    df_print: paged
+---
+
+
+```{r setup, include=FALSE}
+library(knitr)
+library(rmdformats)
+library(tidyverse)
+# figures folder
+fs::dir_create("figs/")
+## Global options
+options(max.print = "75")
+knitr::opts_chunk$set(
+  echo = TRUE,
+  cache = FALSE,
+  prompt = FALSE,
+  tidy = FALSE,
+  comment = "#> ",
+  message = FALSE,
+  warning = FALSE,
+  fig.path = "figs/",
+  fig.retina = 2,
+  fig.width = 9, 
+  fig.height = 7
+)
+knitr::opts_knit$set(width = 75)
+```
+
+```{r ipsum, message=FALSE, warning=FALSE, cache=FALSE, echo=FALSE}
+library(hrbrthemes)
+library(tidyverse)
+update_geom_font_defaults(font_rc)
+```
+
+# Motivation
+
+This repo contains an example career trajectory calculation for Ken Griffey, Jr. I've borrowed heavily from [Analyzing Baseball Data with R, 2nd Edition](https://www.amazon.com/Analyzing-Baseball-Data-Second-Chapman/dp/0815353510) and [Frontiers in Major League Baseball](https://www.springer.com/gp/book/9781441908308).
+
+## Packages 
+
+The two primary packages we will use are `tidyverse` and `Lahman`
+
+```{r packages, message=FALSE, warning=FALSE}
+library(tidyverse)
+library(Lahman)
+```
+
+
+## Get player statistics 
+
+```{r kgjr_id}
+kgjr_id <- Lahman::People %>% 
+  filter(nameFirst == "Ken" & nameLast == "Griffey" & birthYear == 1969) %>% 
+  pull(playerID)
+kgjr_id
+```
+
+We need to change the value of missing statistics from the `Batting` table with 0s, which we can do below. 
+
+`SF` = Sacrifice flies
+
+`HBP` = Hit by pitch
+
+```{r replace-missing-Batting}
+Batting <- Lahman::Batting %>% 
+  tidyr::replace_na(list(SF = 0, HBP = 0))
+```
+
+Now we write a custom function for getting the player stats with a given `playerID`. 
+
+```{r get_stats}
+get_stats <- function(player.id) {
+  Batting %>%
+    dplyr::filter(playerID == player.id) %>%
+    dplyr::inner_join(Master, by = "playerID") %>%
+    dplyr::mutate(birthyear = ifelse(birthMonth >= 7, birthYear + 1, birthYear), 
+      Age = yearID - birthyear, 
+      SLG = (H - X2B - X3B - HR + 2 * X2B + 3 * X3B + 4 * HR) / AB,
+      OBP = (H + BB + HBP) / (AB + BB + HBP + SF),
+      OPS = SLG + OBP) %>%
+dplyr::select(Age, SLG, OBP, OPS)
+}
+```
+
+Now we can view Ken Griffey Jr.'s (`KGJr`) stats over his age (in years).
+
+```{r KGriffeyJr}
+KGriffeyJr <- get_stats(kgjr_id)
+KGriffeyJr %>% rmarkdown::paged_table()
+```
+
+Now we'll take a look at `KGJr`'s OPS vs. his age.
+
+## Age vs. slugging percentage and on-base percentage
+
+The OPS is the sum of a player's slugging percentage and on-base percentage. When we plot it against `KGJr`s age, we can see there is an increase until about age 24, then a gradual decline until age 40.
+
+```{r example-fig}
+KGriffeyJr %>% 
+  ggplot2::ggplot(aes(x = Age, y = OPS)) + 
+  ggplot2::geom_point() + 
+  hrbrthemes::theme_ipsum_tw(axis_title_size = 13, axis_text_size = 12) + 
+  ggplot2::labs(title = "Ken Griffey Jr Career Trajectory", 
+                subtitle = "Age vs. slugging percentage + on-base percentage")
+```
+
+## Modeling career performance 
+
+We will borrow the model from [Analyzing Baseball Data with R, 2nd Edition](https://www.amazon.com/Analyzing-Baseball-Data-Second-Chapman/dp/0815353510) and fit a quadratic curve to `OPS` and `Age`. 
+
+> `A + B(Age − 30) + C(Age − 30)^2`
+
+Where `A`, `B`, and `C` are the following, 
+
+`A` = the predicted value of OPS when the player is 30 years old  
+
+`30 - (B/2C)` = The age where the player is estimated to have his peak batting performance during his career (PEAK AGE).
+
+`A - (B^2/4C)` = maximum value of the curve or the estimated largest `OPS` of the player over his career.
+
+`C` = the degree of curvature in the quadratic function (the larger the number, the steeper the climb and subsequent decline)
+
+Written as a formula for R to interpret, it looks like this:
+
+`OPS ~ I(Age - 30) + I((Age - 30)^2)`
+
+```{r fit}
+fit <- lm(OPS ~ I(Age - 30) + I((Age - 30)^2), data = KGriffeyJr)
+fit
+```
+
+Now we get the coefficients for `fit`
+
+```{r b}
+b <- coef(fit)
+b
+```
+
+Next we need the age_max, or the `30 - (B/2C)`. We can get this by using the 2nd and 3rd element stored in `b` (which are the coefficients for `I(Age - 30)` and `I((Age - 30)^2)`).
+
+age max = `30 - [I(Age - 30)] / [I((Age - 30)^2)] / 2`
+
+```{r age_max}
+b[2]
+b[3]
+age_max <- 30 - b[2] / b[3] / 2
+age_max
+```
+
+With our `age_max`, now we just need the `max_value` or `A - (B^2/4C)` which is `b[1] - b[2] ^ 2 / b[3] / 4` or 
+
+max value = `[(Intercept)] - [I(Age - 30)]^2 / [I((Age - 30)^2)] / 4`
+
+```{r max_value}
+b[1]
+max_value <- b[1] - b[2] ^ 2 / b[3] / 4
+max_value
+```
+
+Finally we combine them into a list. 
+
+```{r list-fit-age_max-max_value}
+list(fit = fit, age_max = age_max, max_value = max_value)
+```
+
+
+```{r fit_model}
+fit_model <- function(d) {
+  
+  fit <- lm(OPS ~ I(Age - 30) + I((Age - 30)^2), data = d)
+  
+  b <- coef(fit)
+  
+  age_max <- 30 - b[2] / b[3] / 2
+  
+  max_value <- b[1] - b[2] ^ 2 / b[3] / 4
+  
+  list(fit = fit, age_max = age_max, max_value = max_value)
+}
+```
+
+```{r KGJr_fit_model}
+KGJr_fit_model <- fit_model(KGriffeyJr)
+coef(KGJr_fit_model$fit)
+```
+
+```{r KGJr_fit_model-age_max-max_value}
+c(KGJr_fit_model$age_max, KGJr_fit_model$max_value)
+```
+
+Best fitting curve is,
+
+`0.97276346 − 0.01198292(Age − 30) − 0.00238516(Age − 30)^2`
+
+According to this model: 
+
+- `KGJr` peaked at age `27.49`  
+
+- His maximum OPS for the curve is stored in `KGJr_fit_model$max_value` and is estimated to be 0.99. 
+
+- The estimated curvature parameter is the `I((Age - 30)^2)` value: `-0.00238516`.
+
+- `KGJr` decrease in `OPS` between his peak age (``27.49``) and one year older is `-0.00238516`.
+
+We can plot this below by creating a few labels for the `Peak Age` and `Max OPS`, and adding 
+
+```{r plot-curve}
+peak_age_label_y <- mean(KGriffeyJr$OPS)
+# peak_age_label_y
+peak_age_label_x <- KGJr_fit_model$age_max + 1.5
+# peak_age_label_x
+max_value_label_y <- KGJr_fit_model$max_value + 0.05
+# max_value_label_y
+max_value_label_x <- min(KGriffeyJr$Age) + 1
+# max_value_label_x
+KGriffeyJr %>% 
+  ggplot2::ggplot(aes(x = Age, y = OPS)) + 
+  ggplot2::geom_point() + 
+  ggplot2::geom_smooth(method = "lm", se = FALSE, size = 1.5, color = "salmon", 
+              formula = y ~ poly(x = x, degree = 2, raw = TRUE)) +
+  ggplot2::geom_vline(xintercept = KGJr_fit_model$age_max, linetype = "dashed", 
+             color = "royalblue") +
+  ggplot2::geom_hline(yintercept = KGJr_fit_model$max_value, linetype = "dashed", 
+             color = "darkgreen") + 
+  ggplot2::annotate(geom = "text", x = c(peak_age_label_x), 
+                          y = c(peak_age_label_y), 
+           label = c("Peak age"), size = 5, color = "royalblue") + 
+  ggplot2::annotate(geom = "text", x = c(max_value_label_x), 
+                          y = c(max_value_label_y), 
+           label = c("Max OPS"), size = 5, color = "darkgreen") +
+  hrbrthemes::theme_ipsum_tw(axis_title_size = 13, axis_text_size = 12) +
+  ggplot2::labs(title = "Ken Griffey Jr Career Trajectory", 
+                subtitle = "Age vs. slugging percentage + on-base percentage")
+```
+
+
+
+
+
+
+## Deploy
+
+Run this code to knit an html file and move it to `docs` folder. 
+
+```{r deploy-to-github, results='hide', message=FALSE, warning=FALSE}
+# create docs folder
+fs::dir_create("docs")
+# knit and move to docs folder
+knitr::knit(input = "index.Rmd", output = "docs/index.html")
+```
+
