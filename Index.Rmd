@@ -60,7 +60,9 @@ library(broom)
 
 ```{r kgjr_id}
 kgjr_id <- Lahman::People %>% 
-  filter(nameFirst == "Ken" & nameLast == "Griffey" & birthYear == 1969) %>% 
+  filter(nameFirst == "Ken" & 
+           nameLast == "Griffey" & 
+           birthYear == 1969) %>% 
   pull(playerID)
 kgjr_id
 ```
@@ -82,7 +84,7 @@ Now we write a custom function for getting the player stats with a given `player
 get_stats <- function(player.id) {
   Batting %>%
     dplyr::filter(playerID == player.id) %>%
-    dplyr::inner_join(Master, by = "playerID") %>%
+    dplyr::inner_join(People, by = "playerID") %>%
     dplyr::mutate(birthyear = ifelse(birthMonth >= 7, birthYear + 1, birthYear), 
       Age = yearID - birthyear, 
       SLG = (H - X2B - X3B - HR + 2 * X2B + 3 * X3B + 4 * HR) / AB,
